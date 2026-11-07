@@ -1,0 +1,57 @@
+# Select yml or bitwarden explicitly.
+bot_credentials: yml
+
+twitch:
+  channel: dein_channel
+  # Required only with bot_credentials: yml
+  # client_id: deine_client_id
+  # client_secret: dein_client_secret
+
+# bitwarden:
+  # item_id: deine_item_id
+  # client_id_field: client_id
+  # client_secret_field: client_secret
+
+# Relative to this YAML file. Keep "tokens.json" for portable app experience
+token_file: tokens.json
+
+# Chat commands: cooldown in seconds; aliases are comma-separated and omit the prefix.
+prefix: "!"
+user_cooldown: 1
+blacklist: []
+
+commands:
+  project:
+    alias: projekt
+    message: Ich entwickle gerade madLink, eine self-hosted Open-Source Link-in-Bio-Plattform unter AGPLv3. Mit anpassbaren Themes + Community Theme Markeplace, zeitgesteuerten Links uvm. gestaltest du die Seite deiner Träume! ✨ Außerdem lässt es sich als Multi-tenant System mit Mitarbeiter-Accounts, Limits etc. betreiben und es gibt Aufruf-/Klick-Statistiken ohne Cookie- oder IP- Tracking sowie eine fette REST-API! Du behältst immer die Kontrolle über Hosting und Daten. Hier im Stream entsteht der erste Release!
+  socials:
+    alias: sns, sm
+    message: "Hier sind alle Socials - Community Discord: https://discord.com/invite/YH9J6ptHt7 | Insta: https://www.instagram.com/mad__linux/ | TikTok: https://www.tiktok.com/@madLinux7 | YouTube: https://www.youtube.com/@madLinux"
+  instagram:
+    alias: insta
+    message: https://www.instagram.com/mad__linux
+  tiktok:
+    alias: tt
+    message: https://www.tiktok.com/@madLinux7
+  youtube:
+    alias: yt
+    message: https://www.youtube.com/@madLinux
+  discord:
+    alias: dc
+    message: https://discord.com/invite/YH9J6ptHt7
+  carli:
+    message: Die ist immer ausgestattet
+  johann:
+    message: Der Geilste
+
+# live-only or always-on
+mode: "live-only"
+
+# Intervals are minutes; use exactly one of message or command.
+loops:
+  discord:
+    interval: 30
+    message: "Joint dem coolsten Community Discord LUL https://discord.com/invite/YH9J6ptHt7"
+  socials:
+    interval: 60
+    command: "socials"
