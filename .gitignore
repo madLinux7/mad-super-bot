@@ -1,0 +1,8 @@
+/target/
+/.env
+/tokens.json
+/tokens.json.*
+/node_modules/
+.bot-token-*
+
+/config.yml
