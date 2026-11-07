@@ -38,7 +38,7 @@ async fn process_combines_commands_reload_loops_and_shutdown_with_network_double
         .finish();
     let _logging = tracing::subscriber::set_default(subscriber);
     let dir = tempfile::tempdir().unwrap();
-    let commands = include_str!("../config.example.yml")
+    let commands = include_str!("fixtures/config.yml")
         .split("# live-only or always-on")
         .next()
         .unwrap()
@@ -222,7 +222,7 @@ async fn process_combines_commands_reload_loops_and_shutdown_with_network_double
 #[tokio::test]
 async fn live_only_ignores_status_queries_from_before_reconnect_and_newer_events() {
     let dir = tempfile::tempdir().unwrap();
-    let commands = include_str!("../config.example.yml")
+    let commands = include_str!("fixtures/config.yml")
         .split("# live-only or always-on")
         .next()
         .unwrap();

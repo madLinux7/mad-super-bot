@@ -3,7 +3,7 @@ use mad_super_bot::{
     reload::Reload,
 };
 use std::time::Duration;
-const YAML: &str = include_str!("../config.example.yml");
+const YAML: &str = include_str!("fixtures/config.yml");
 async fn next(reload: &mut Reload) -> anyhow::Result<LoadedConfig> {
     tokio::time::timeout(Duration::from_secs(3), reload.next())
         .await

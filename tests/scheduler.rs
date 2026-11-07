@@ -6,7 +6,7 @@ use mad_super_bot::{
 use std::time::Duration;
 use tokio::time::Instant;
 fn config(mode: &str) -> Config {
-    let text = include_str!("../config.example.yml")
+    let text = include_str!("fixtures/config.yml")
         .split("# live-only or always-on")
         .next()
         .unwrap();

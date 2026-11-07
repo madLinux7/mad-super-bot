@@ -1,5 +1,5 @@
 use std::process::Command;
-const YAML: &str = include_str!("../config.example.yml");
+const YAML: &str = include_str!("fixtures/config.yml");
 fn cli(dir: &std::path::Path) -> Command {
     let mut c = Command::new(env!("CARGO_BIN_EXE_mad-super-bot"));
     c.current_dir(dir)

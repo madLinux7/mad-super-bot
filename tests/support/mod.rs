@@ -34,11 +34,25 @@ pub fn validated(client: &str, user: &str) -> String {
 pub fn tokens() -> String {
     serde_json::json!({"access_token":"old-access","refresh_token":"old-refresh","user_id":"bot-id"}).to_string()
 }
+#[cfg(windows)]
+#[path = "../../src/token_file.rs"]
+mod token_permissions;
+
 pub fn token_file(dir: &std::path::Path) -> std::path::PathBuf {
-    use std::os::unix::fs::PermissionsExt;
     let file = dir.join("tokens.json");
-    std::fs::write(&file, tokens()).unwrap();
-    std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o600)).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::write(&file, tokens()).unwrap();
+        std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o600)).unwrap();
+    }
+    #[cfg(windows)]
+    {
+        use std::io::Write;
+        let mut private = token_permissions::create(dir).unwrap();
+        private.write_all(tokens().as_bytes()).unwrap();
+        private.persist(&file).unwrap();
+    }
     file
 }
 

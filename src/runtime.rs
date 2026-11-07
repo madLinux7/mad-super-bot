@@ -390,10 +390,6 @@ pub async fn run_loaded(
 }
 
 pub async fn shutdown_signal() -> Result<()> {
-    let mut term = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
-    tokio::select! {
-        result = tokio::signal::ctrl_c() => result?,
-        _ = term.recv() => {}
-    }
+    crate::startup::ShutdownSignals::new()?.recv().await;
     Ok(())
 }

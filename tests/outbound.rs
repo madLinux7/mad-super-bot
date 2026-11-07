@@ -7,7 +7,7 @@ use std::time::Duration;
 use tokio::time::Instant;
 fn config() -> Config {
     mad_super_bot::config::LoadedConfig::parse(
-        include_str!("../config.example.yml"),
+        include_str!("fixtures/config.yml"),
         std::path::Path::new("config.yml"),
     )
     .unwrap()

@@ -3,7 +3,6 @@ use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use std::{
     io::Write,
-    os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
     sync::Arc,
     time::Duration,
@@ -172,13 +171,7 @@ fn persist(path: &Path, tokens: &StoredTokens) -> Result<()> {
         .filter(|p| !p.as_os_str().is_empty())
         .unwrap_or(Path::new("."));
     std::fs::create_dir_all(parent).context("cannot create token directory")?;
-    let mut file = tempfile::Builder::new()
-        .prefix(".bot-token-")
-        .tempfile_in(parent)
-        .context("cannot create private token file")?;
-    file.as_file()
-        .set_permissions(std::fs::Permissions::from_mode(0o600))
-        .context("cannot protect token file")?;
+    let mut file = crate::token_file::create(parent).context("cannot create private token file")?;
     serde_json::to_writer(file.as_file_mut(), tokens).context("cannot encode token file")?;
     file.flush().context("cannot write token file")?;
     file.as_file()
@@ -186,9 +179,7 @@ fn persist(path: &Path, tokens: &StoredTokens) -> Result<()> {
         .context("cannot synchronize token file")?;
     file.persist(path)
         .map_err(|_| anyhow::anyhow!("cannot atomically replace token file"))?;
-    std::fs::File::open(parent)
-        .and_then(|f| f.sync_all())
-        .context("cannot synchronize token directory")?;
+    crate::token_file::sync_parent(parent)?;
     Ok(())
 }
 impl AuthManager {
@@ -198,14 +189,10 @@ impl AuthManager {
         endpoints: Endpoints,
     ) -> Result<Self> {
         let path = std::path::absolute(path.as_ref()).context("cannot resolve token path")?;
-        let metadata = std::fs::metadata(&path).context("token file missing; run auth first")?;
-        ensure!(
-            metadata.is_file() && metadata.permissions().mode() & 0o077 == 0,
-            "token file must be a private regular file with mode 0600"
-        );
-        let tokens: StoredTokens =
-            serde_json::from_slice(&std::fs::read(&path).context("cannot read token file")?)
-                .map_err(|_| anyhow::anyhow!("token file invalid; run auth again"))?;
+        let file = std::fs::File::open(&path).context("token file missing; run auth first")?;
+        crate::token_file::validate(&file)?;
+        let tokens: StoredTokens = serde_json::from_reader(file)
+            .map_err(|_| anyhow::anyhow!("token file invalid; run auth again"))?;
         ensure!(
             !tokens.access_token.is_empty()
                 && !tokens.refresh_token.is_empty()

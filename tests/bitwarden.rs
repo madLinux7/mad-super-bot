@@ -1,3 +1,4 @@
+#![cfg(unix)]
 use std::{
     fs,
     os::unix::fs::PermissionsExt,
@@ -70,7 +71,7 @@ impl Fixture {
             fs::write(&p, script).unwrap();
             fs::set_permissions(p, fs::Permissions::from_mode(0o755)).unwrap();
         }
-        let yaml = include_str!("../config.example.yml")
+        let yaml = include_str!("fixtures/config.yml")
             .replace("deine_item_id", "configured-item")
             .replace("client_id_field: client_id", "client_id_field: custom-id")
             .replace(
@@ -240,7 +241,7 @@ fn stalled_noninteractive_call_times_out_and_locks_without_a_signal() {
     f.safe(&o);
     assert!(!o.status.success());
     assert_eq!(f.events().last().map(String::as_str), Some("lock"));
-    assert!(String::from_utf8_lossy(&o.stderr).contains("Zeitlimit"));
+    assert!(String::from_utf8_lossy(&o.stderr).contains("Vault CLI timed out"));
 }
 
 #[test]

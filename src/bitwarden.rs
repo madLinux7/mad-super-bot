@@ -1,37 +1,60 @@
 //! Interactive Bitwarden credential loading in the bot process.
+use crate::startup::ShutdownSignals;
 use crate::{auth::Credentials, config::BitwardenSettings as Config};
 use anyhow::{Context, Result, anyhow, bail};
 use futures_util::FutureExt;
 use serde::Deserialize;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::time::Duration;
 use std::{
     ffi::OsStr,
     io::IsTerminal,
-    os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
     process::Stdio,
 };
-use tokio::{
-    io::AsyncReadExt,
-    process::Command,
-    signal::unix::{Signal, SignalKind, signal},
-};
+use tokio::{io::AsyncReadExt, process::Command};
 use zeroize::Zeroizing;
 
 fn clean(command: &mut std::process::Command) {
     for (key, _) in std::env::vars_os() {
-        if key.as_encoded_bytes().starts_with(b"BW_") {
+        #[cfg(unix)]
+        let is_vault_variable = key.as_encoded_bytes().starts_with(b"BW_");
+        #[cfg(windows)]
+        let is_vault_variable = key
+            .to_string_lossy()
+            .get(..3)
+            .is_some_and(|prefix| prefix.eq_ignore_ascii_case("BW_"));
+        if is_vault_variable {
             command.env_remove(key);
         }
     }
 }
 fn executable(path: &Path) -> bool {
-    path.is_file()
-        && path
-            .metadata()
-            .is_ok_and(|m| m.permissions().mode() & 0o111 != 0)
+    #[cfg(windows)]
+    {
+        path.is_file()
+            && path
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("exe"))
+    }
+    #[cfg(unix)]
+    {
+        path.is_file()
+            && path
+                .metadata()
+                .is_ok_and(|m| m.permissions().mode() & 0o111 != 0)
+    }
 }
 fn resolve(path: &Path) -> Result<PathBuf> {
+    #[cfg(windows)]
+    let with_extension = path.with_extension("exe");
+    #[cfg(windows)]
+    let path = if path.extension().is_none() {
+        with_extension.as_path()
+    } else {
+        path
+    };
     let found = if path.components().count() > 1 || path.is_absolute() {
         executable(path).then(|| path.to_owned())
     } else {
@@ -43,12 +66,11 @@ fn resolve(path: &Path) -> Result<PathBuf> {
     };
     found
         .and_then(|p| p.canonicalize().ok())
-        .ok_or_else(|| anyhow!("Required executable is missing"))
+        .ok_or_else(|| anyhow!("Required Bitwarden executable is missing; install bw and add it to PATH (bw.exe on Windows)"))
 }
 struct Vault {
     bw: PathBuf,
-    interrupt: Signal,
-    terminate: Signal,
+    signals: ShutdownSignals,
     cancelled: bool,
 }
 impl Vault {
@@ -74,9 +96,7 @@ impl Vault {
         if let Some(session) = session {
             command.env("BW_SESSION", session);
         }
-        let mut child = command
-            .spawn()
-            .context("Could not start the vault CLI")?;
+        let mut child = command.spawn().context("Could not start the vault CLI")?;
         let mut stdout = child.stdout.take().expect("piped stdout");
         let mut reader = tokio::spawn(async move {
             let mut bytes = Zeroizing::new(Vec::new());
@@ -87,8 +107,7 @@ impl Vault {
         let status = loop {
             tokio::select! {
                 biased;
-                _ = self.interrupt.recv() => self.cancelled = true,
-                _ = self.terminate.recv() => self.cancelled = true,
+                _ = self.signals.recv() => self.cancelled = true,
                 status = child.wait() => break status,
                 _ = &mut deadline, if cleanup || !unlock => {
                     let _ = child.kill().await;
@@ -125,9 +144,7 @@ impl Vault {
         self.command(&[OsStr::new("lock")], session, false, true)
             .await
             .map(|_| ())
-            .map_err(|_| {
-                anyhow!("Could not lock the vault. Please run `bw lock` manually.")
-            })
+            .map_err(|_| anyhow!("Could not lock the vault. Please run `bw lock` manually."))
     }
 }
 #[derive(Deserialize)]
@@ -183,15 +200,14 @@ pub async fn load(config: &Config) -> Result<Credentials> {
     }
     let mut vault = Vault {
         bw,
-        interrupt: signal(SignalKind::interrupt())?,
-        terminate: signal(SignalKind::terminate())?,
+        signals: ShutdownSignals::new()?,
         cancelled: false,
     };
     let status = vault
         .command(&[OsStr::new("status")], None, false, false)
         .await?;
-    let status: serde_json::Value = serde_json::from_slice(&status)
-        .map_err(|_| anyhow!("Could not read vault status"))?;
+    let status: serde_json::Value =
+        serde_json::from_slice(&status).map_err(|_| anyhow!("Could not read vault status"))?;
     if !matches!(
         status.get("status").and_then(|v| v.as_str()),
         Some("locked" | "unlocked")
@@ -238,9 +254,7 @@ pub async fn load(config: &Config) -> Result<Credentials> {
     // Even a failed unlock can have changed the CLI profile before exiting.
     vault.lock(session.as_deref().map(String::as_str)).await?;
     drop(session);
-    if vault.interrupt.recv().now_or_never().is_some()
-        || vault.terminate.recv().now_or_never().is_some()
-    {
+    if vault.signals.recv().now_or_never().is_some() {
         vault.cancelled = true;
     }
     if vault.cancelled {
@@ -248,4 +262,38 @@ pub async fn load(config: &Config) -> Result<Credentials> {
     }
     let (client_id, client_secret) = loaded?;
     Ok(Credentials::new(client_id.as_str(), client_secret.as_str()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resolves_native_executable_and_rejects_missing_file() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory
+            .path()
+            .join(if cfg!(windows) { "bw.exe" } else { "bw" });
+        assert!(resolve(&path).is_err());
+        std::fs::write(&path, b"fixture").unwrap();
+        #[cfg(unix)]
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700)).unwrap();
+        assert_eq!(resolve(&path).unwrap(), path.canonicalize().unwrap());
+        #[cfg(windows)]
+        assert_eq!(
+            resolve(&path.with_extension("")).unwrap(),
+            path.canonicalize().unwrap()
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn rejects_shell_wrappers_as_native_executables() {
+        let directory = tempfile::tempdir().unwrap();
+        for name in ["bw.cmd", "bw.bat", "bw.ps1"] {
+            let path = directory.path().join(name);
+            std::fs::write(&path, "fixture").unwrap();
+            assert!(resolve(&path).is_err());
+        }
+    }
 }

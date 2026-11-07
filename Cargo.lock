@@ -979,6 +979,7 @@ dependencies = [
  "tracing-subscriber",
  "twitch_api",
  "twitch_oauth2",
+ "windows-sys 0.61.2",
  "zeroize",
 ]
 

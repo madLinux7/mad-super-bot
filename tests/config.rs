@@ -1,6 +1,6 @@
 use mad_super_bot::config::{ConfigPaths, LoadedConfig, LoopMode, LoopPayload};
 use std::{path::Path, time::Duration};
-const YAML: &str = include_str!("../config.example.yml");
+const YAML: &str = include_str!("fixtures/config.yml");
 fn parse(text: &str) -> anyhow::Result<LoadedConfig> {
     LoadedConfig::parse(text, Path::new("test.yml"))
 }

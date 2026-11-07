@@ -17,12 +17,10 @@ pub struct Shutdown {
 }
 impl Shutdown {
     pub fn new() -> Result<Self> {
-        use tokio::signal::unix::{SignalKind, signal};
-        let mut interrupt = signal(SignalKind::interrupt())?;
-        let mut terminate = signal(SignalKind::terminate())?;
+        let mut signals = ShutdownSignals::new()?;
         let (sender, receiver) = tokio::sync::watch::channel(false);
         let task = tokio::spawn(async move {
-            tokio::select! { _ = interrupt.recv() => {}, _ = terminate.recv() => {} }
+            signals.recv().await;
             let _ = sender.send(true);
         });
         Ok(Self { receiver, task })
@@ -42,5 +40,61 @@ impl Shutdown {
 impl Drop for Shutdown {
     fn drop(&mut self) {
         self.task.abort();
+    }
+}
+
+/// Register before starting work so cancellation also covers startup and vault cleanup.
+pub(crate) struct ShutdownSignals {
+    #[cfg(unix)]
+    interrupt: tokio::signal::unix::Signal,
+    #[cfg(unix)]
+    terminate: tokio::signal::unix::Signal,
+    #[cfg(windows)]
+    interrupt: tokio::signal::windows::CtrlC,
+    #[cfg(windows)]
+    terminate: tokio::signal::windows::CtrlBreak,
+    #[cfg(windows)]
+    close: tokio::signal::windows::CtrlClose,
+    #[cfg(windows)]
+    logoff: tokio::signal::windows::CtrlLogoff,
+    #[cfg(windows)]
+    shutdown: tokio::signal::windows::CtrlShutdown,
+}
+impl ShutdownSignals {
+    pub(crate) fn new() -> Result<Self> {
+        #[cfg(unix)]
+        {
+            use tokio::signal::unix::{SignalKind, signal};
+            Ok(Self {
+                interrupt: signal(SignalKind::interrupt())?,
+                terminate: signal(SignalKind::terminate())?,
+            })
+        }
+        #[cfg(windows)]
+        {
+            use tokio::signal::windows;
+            Ok(Self {
+                interrupt: windows::ctrl_c()?,
+                terminate: windows::ctrl_break()?,
+                close: windows::ctrl_close()?,
+                logoff: windows::ctrl_logoff()?,
+                shutdown: windows::ctrl_shutdown()?,
+            })
+        }
+    }
+    pub(crate) async fn recv(&mut self) {
+        #[cfg(unix)]
+        tokio::select! {
+            _ = self.interrupt.recv() => {},
+            _ = self.terminate.recv() => {},
+        }
+        #[cfg(windows)]
+        tokio::select! {
+            _ = self.interrupt.recv() => {},
+            _ = self.terminate.recv() => {},
+            _ = self.close.recv() => {},
+            _ = self.logoff.recv() => {},
+            _ = self.shutdown.recv() => {},
+        }
     }
 }

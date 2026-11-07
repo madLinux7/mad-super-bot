@@ -27,6 +27,7 @@ async fn validates_client_scopes_and_saved_bot_identity() {
 
 #[tokio::test]
 async fn simultaneous_unauthorized_requests_refresh_once_and_persist_rotated_token() {
+    #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
     let dir = tempfile::tempdir().unwrap();
     let path = token_file(dir.path());
@@ -50,6 +51,7 @@ async fn simultaneous_unauthorized_requests_refresh_once_and_persist_rotated_tok
             .unwrap()
             .contains("new-refresh")
     );
+    #[cfg(unix)]
     assert_eq!(
         std::fs::metadata(path).unwrap().permissions().mode() & 0o777,
         0o600

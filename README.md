@@ -1,99 +1,81 @@
 # Mad Super Bot
 
-A Twitch bot for project links, socials and scheduled chat messages. Edit one YAML file and save to update the running bot.
+Your Twitch chat sidekick for socials, project links and the occasional “join our Discord.” Add your commands and reminders to one file, save, and you're good to go.
 
-## Quick start
+## Install
 
-You need Linux, Rust **1.89+**, a Twitch application and an account that will send the bot's messages.
+**Linux (x64) / macOS (Intel & Apple Silicon)**
 
-```bash
-git clone https://github.com/madLinux7/mad-super-bot.git
-cd mad-super-bot
-cargo build --release
-cp config.example.yml config.yml
-chmod 600 config.yml
+```sh
+curl -fsSL https://raw.githubusercontent.com/madLinux7/mad-super-bot/main/install.sh | sh
 ```
 
-Edit `config.yml`. Set `twitch.channel` to the channel's login without `#`. Choose exactly one credential source with the required `bot_credentials` setting:
+**Windows (x64) — PowerShell**
 
-- `yml`: fill in `twitch.client_id` and `twitch.client_secret` with your Twitch application's credentials.
-- `bitwarden`: fill in `bitwarden.item_id` and the names of the two custom fields containing those credentials. The example selects this source.
-
-Register a confidential application in the [Twitch Developer Console](https://dev.twitch.tv/console). The account that acts as the bot is selected during authorization.
-
-Check your settings, authorize the bot account, then start:
-
-```bash
-./target/release/mad-super-bot check-config
-./target/release/mad-super-bot auth
-./target/release/mad-super-bot
+```powershell
+irm https://raw.githubusercontent.com/madLinux7/mad-super-bot/main/install.ps1 | iex
 ```
 
-`check-config` checks the whole file locally, including the selected credential source. It never calls Twitch or Bitwarden. During `auth`, open the printed Twitch link, sign in as the intended bot account and approve chat access. Later starts reuse the private token file; repeat `auth` when requested.
+Follow the installer's PATH hint if `mad-super-bot` isn't found. Run the installer again to update — your settings stay put.
 
-Send `!project` in your channel from another account to try it. Press `Ctrl+C` to stop the bot.
+Installers download the latest [release](https://github.com/madLinux7/mad-super-bot/releases). They need a published release first. Platform builds are still awaiting verification.
 
-## Configuration
+## Set it up
 
-`config.example.yml` contains all eight existing commands and both scheduled messages. Copy it and edit the replies, aliases and links as needed. Keep `config.yml` private; Git ignores it.
+1. Save [config.example.yml](config.example.yml) as `config.yml` in a folder for your bot. Open a terminal in that folder.
+2. Set `twitch.channel` to your Twitch username, without `#`.
+3. Create a **confidential** app in the [Twitch Developer Console](https://dev.twitch.tv/console). Leave `bot_credentials: yml` and fill in `twitch.client_id` and `twitch.client_secret` in your file (remove the `#` before those lines).
+4. Replace the example commands and links with your own.
+
+Then run:
+
+```sh
+mad-super-bot check-config
+mad-super-bot auth
+mad-super-bot
+```
+
+During `auth`, open the link and sign in as the account you want chatting as your bot. You only need to do this again if the bot asks.
+
+Try `!socials` from another account in your chat. Keep the terminal open while streaming; **Ctrl+C** stops the bot. Next time, just run `mad-super-bot` from the same folder.
+
+Keep `config.yml` and `tokens.json` private — they contain your login details.
+
+## Make it yours
+
+Here's the fun part of `config.yml`:
 
 ```yaml
-bot_credentials: yml
-
-twitch:
-  channel: your_channel
-  client_id: your_client_id
-  client_secret: your_client_secret
-
-token_file: tokens.json
 prefix: "!"
-user_cooldown: 1 # seconds
-blacklist: []
+user_cooldown: 5 # seconds between commands per viewer
+blacklist: [] # Twitch usernames the bot should ignore
 
 commands:
-  project:
-    alias: projekt
-    message: "Here's what I'm building: https://example.com"
   socials:
     alias: "sns, sm"
-    message: >-
-      Find my socials here:
-      https://example.com/socials
+    message: "Find me here: https://example.com"
+  discord:
+    alias: dc
+    message: "Come hang out: https://discord.gg/your-invite"
 
 mode: live-only
 loops:
-  discord:
+  community:
     interval: 30 # minutes
-    message: "Join the community: https://example.com/discord"
-  socials:
-    interval: 60
-    command: socials
+    command: discord
 ```
 
-Set `alias` to a comma-separated string (for example, `alias: "sns, sm"`). Whitespace around aliases is trimmed; an empty string or omitted field means no aliases. Names and aliases must be unique ASCII tokens without spaces or the prefix. Matching ignores ASCII case. Each viewer shares one cooldown across all commands and aliases; `user_cooldown: 0` disables it. Blacklisted logins cannot trigger bot replies. Messages must contain text and have at most 500 characters.
+- Viewers can use `!socials`, `!sns` or `!sm` for the same reply.
+- Reminders run while you're live. Use `always-on` to send them offline too.
+- A reminder can repeat a command, as above, or use its own `message` instead of `command`.
+- Save the file to update commands and reminders while the bot is running. If something's off, it keeps your last working settings and tells you what to fix.
+- Restart the bot after changing your channel or login details.
 
-Each loop needs a positive interval in minutes and exactly one of `message` or `command`. A command reference uses the canonical name without its prefix, rather than an alias. Fractional minutes work: `0.5` means 30 seconds.
+## Prefer Bitwarden?
 
-`live-only` (the default) sends reminders only while Twitch reports the stream as live. `always-on` also runs while offline. The first message waits a full interval; no missed messages are caught up. Editing text keeps the countdown; changing intervals or mode starts a new countdown. Chat commands work in either mode, including while offline.
+Install the [Bitwarden CLI](https://bitwarden.com/help/cli/) and sign in with `bw login`. On Windows, use the standalone `bw.exe` and add its folder to PATH. [Vaultwarden](https://github.com/dani-garcia/vaultwarden) works too.
 
-`token_file` is relative to the YAML file's directory unless absolute. Paths are literal: `~`, `$HOME` and `${VARIABLE}` are never expanded. `.env`, `TWITCH_*` and `BOT_*` variables do not supply or override configuration. Unknown and duplicate YAML keys are rejected.
-
-## Edit while streaming
-
-Save `config.yml` to apply commands, aliases, prefix, cooldown, blacklist, mode and loops together. Atomic file replacement by editors is supported. Invalid saves leave the last valid settings active; repair and save the file to retry. Diagnostics identify the file and setting path without printing values or source snippets.
-
-Credential source, channel, app credentials, vault references and token path are startup settings. Changing them prints **restart required** and keeps the current startup settings until you restart. Valid bot settings from the same save still take effect. Token refresh continues to update the token file separately.
-
-## Bitwarden
-
-Install the [Bitwarden CLI](https://bitwarden.com/help/cli/), configure your server if needed, and sign in with `bw login`. [Vaultwarden](https://github.com/dani-garcia/vaultwarden) is a drop-in server option.
-
-```bash
-bw config server https://vault.example.com
-bw login
-```
-
-Create a vault item with unique, nonempty custom string fields for the Twitch application credentials, then configure their names:
+Store your Twitch app's client ID and secret as custom text fields in a vault item, then use:
 
 ```yaml
 bot_credentials: bitwarden
@@ -105,32 +87,13 @@ bitwarden:
   client_secret_field: client_secret
 ```
 
-Use the same `check-config`, `auth` and start commands shown above. Authorization and normal startup require an interactive terminal for the vault master password. The bot unlocks, synchronizes, reads the item and locks the vault before using credentials in the same process. Failure or interruption stops startup and attempts to lock the vault. If locking fails, run `bw lock` manually. There is no fallback to another credential source.
+Start normally. The bot asks for your vault password, grabs the details and locks the vault again.
 
-The CLI respects the Bitwarden CLI profile (`BITWARDENCLI_APPDATA_DIR`) but removes inherited `BW_*` values from vault subprocesses and supplies only its freshly obtained session.
+## Something stuck?
 
-## Command reference
+- **No reply?** Try another account, check your blacklist and wait for the cooldown.
+- **No reminder?** Make sure you're live and wait a full reminder interval.
+- **Login expired?** Run `mad-super-bot auth` again with your bot account.
+- **Settings error?** Run `mad-super-bot check-config` and fix the setting it points out.
 
-| Command | Purpose |
-| --- | --- |
-| `mad-super-bot` | Start using `./config.yml` |
-| `mad-super-bot check-config` | Validate the entire configuration offline |
-| `mad-super-bot auth` | Authorize the intended bot account |
-| `mad-super-bot --config /path/to/config.yml` | Use another YAML file |
-| `mad-super-bot --help` | Show commands and options |
-| `mad-super-bot --version` | Show the version |
-
-`--config` also works after a subcommand, for example `mad-super-bot check-config --config settings/bot.yml`. The former configuration directory, token path and Bitwarden flags have been removed. TOML bot configurations are no longer supported; `Cargo.toml` remains the Rust project manifest.
-
-## Troubleshooting
-
-| Problem | Check |
-| --- | --- |
-| Invalid configuration | Correct the reported setting in the selected YAML file and run `check-config` |
-| No command reply | Use another account, check the blacklist, and wait for the viewer cooldown |
-| No reminder | Check the mode and wait for a full interval after going live |
-| Changes do not take effect | Read the reload diagnostic; startup settings require a restart |
-| Authorization expired | Run `auth` again as the intended bot account |
-| Vault cannot be locked | Run `bw lock` before retrying |
-
-With Twitch Shared Chat, replies may also appear in connected channels. Live Twitch authorization and real vault unlocking are manual integration checks; see [verification](docs/VERIFICATION.md).
+Use `mad-super-bot --help` for more options.
